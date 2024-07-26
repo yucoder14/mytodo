@@ -30,16 +30,16 @@ fn prompt_read_stdin(prompt: &str, buf: &mut String) {
 
 fn create_table(db: &Connection, table_name: &str ) -> Result<usize>{
 	db.execute(
-        &format!("CREATE TABLE IF NOT EXISTS {table_name} (
+        &*format!("CREATE TABLE IF NOT EXISTS {table_name} (
             id   INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             data BLOB
-        )")[..],
+        )"),
         (), 
     )
 }
 
-fn insert(db: &Connection) {
+fn insert(db: &Connection, table_name: &str) {
 	let _ = io::stdout().flush(); 
 	
 	let mut name = String::new(); 
@@ -57,7 +57,7 @@ fn insert(db: &Connection) {
 
 	
 	if let Err(e) = db.execute(
-		"INSERT INTO person (name, data) Values (?1, ?2)", 	
+		&*format!("INSERT INTO {table_name} (name, data) Values (?1, ?2)"), 	
 		(&person.name, &person.data),
 	) { 
 		println!("failed to add {}: {}", &person.name, e);
@@ -66,7 +66,7 @@ fn insert(db: &Connection) {
 	}
 }
 
-fn delete(db: &Connection) -> Result<usize> {
+fn delete(db: &Connection, table_name: &str) {
 	let _ = io::stdout().flush(); 
 
 	let mut ids = String::new(); 
@@ -78,7 +78,7 @@ fn delete(db: &Connection) -> Result<usize> {
 
 	for id in ids.split_whitespace() { 
 		if let Err(e) = db.execute( 
-			"DELETE FROM person WHERE ID = ?1",
+			&*format!("DELETE FROM {table_name} WHERE ID = ?1"),
 			[id]
 		) {
 			println!("failed to delete id {}: {}", id, e); 
@@ -86,12 +86,10 @@ fn delete(db: &Connection) -> Result<usize> {
 			println!("deleted id {}", id);
 		}
 	}
-
-	Ok(0)
 }
 
-fn display(db: &Connection) -> Result<usize> {
-	let mut stmt = db.prepare("SELECT id, name, data FROM person")?;
+fn display(db: &Connection, table_name: &str) -> Result<usize> {
+	let mut stmt = db.prepare(&*format!("SELECT id, name, data FROM {table_name}"))?;
 	let person_iter = stmt.query_map([], |row| {
 		Ok(Person {
 			id: row.get(0)?,
@@ -119,7 +117,7 @@ fn help(){
 	)
 }
 
-pub fn run(db: Connection) -> Result<()> {	
+pub fn run(db: Connection) -> Result<()> {
 	let mut table_name = String::new(); 
 
 	prompt_read_stdin(
@@ -152,13 +150,13 @@ pub fn run(db: Connection) -> Result<()> {
 			}
 			"quit" => break 'mytodo, 
 			"add" => {
-				let _ = insert(&db); 
+				let _ = insert(&db, &table_name); 
 			} 
 			"del" => {
-				let _ = delete(&db)?;
+				let _ = delete(&db, &table_name);
 			} 
 			"list" => { 
-				let _ = display(&db)?;
+				let _ = display(&db, &table_name)?;
 			}
 			"help" => help(),
 			_ => { 
