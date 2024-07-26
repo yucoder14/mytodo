@@ -105,63 +105,125 @@ fn display(db: &Connection, table_name: &str) -> Result<usize> {
 	Ok(0)
 }
 
-fn help(){
+fn help_inner(){
 	print!(
 "Commands: 
     add  - add a new element to the list 
     del  - delete element(s) from the list
     list - display the list 
-    help - print usage
-    quit - quit mytodo 
+    help - print help
+    quit - quit interactive mode
 "
 	)
 }
 
-pub fn run(db: Connection) -> Result<()> {
-	let mut table_name = String::new(); 
-
-	prompt_read_stdin(
-		"Please enter list to create/modify: ", 
-		&mut table_name,
-	);
-	
-	let _ =	create_table(&db, &table_name)?; 
-
-	'mytodo: loop {
+fn inner_loop(db: &Connection, table_name: &str) -> Result<()> {
+	'inner: loop {
 		let mut command = String::new();
 
 		command.clear();
 
 		prompt_read_stdin(
-			&*format!("{} >>> ", &table_name.trim()), 
+			&*format!("({}) >>> ", &table_name.trim()), 
 			&mut command,
 		);
-		
-		let mut command = command.split_whitespace();
 
-		let command = command 
-			.next()
-			.unwrap_or("");
+		let command = command.trim();		
 
-		match &command[..] {
+		match command {
 			"" => print!(""),
-			"clear" => { 
-				print!("\x1B[2J\x1B[1;1H");
-			}
-			"quit" => break 'mytodo, 
-			"add" => {
-				let _ = insert(&db, &table_name); 
-			} 
-			"del" => {
-				let _ = delete(&db, &table_name);
-			} 
+			"clear" => print!("\x1B[2J\x1B[1;1H"),
+			"quit" => break 'inner, 
+			"add" => insert(db, table_name), 
+			"del" => delete(db, table_name),
 			"list" => { 
-				let _ = display(&db, &table_name)?;
+				let _ = display(db, table_name)?;
 			}
-			"help" => help(),
+			"help" => help_inner(),
 			_ => { 
 				println!("{:?} is not a valid command", &command);
-				help(); 
+				help_inner(); 
+			}
+		}
+	}
+
+	Ok(())
+}
+
+fn display_tables(db: &Connection) -> Result<()>{
+	let mut stmt = db.prepare(
+		"SELECT 
+			name 
+		FROM 
+			sqlite_schema 
+		WHERE
+			type = 'table' AND 
+			name NOT LIKE 'sqlite_%'",
+	)?; 
+
+	let rows = stmt.query_map([], |row| {
+		let name: String = row.get(0)?; 
+		Ok(name)
+	})?;
+
+	for table in rows {
+		print!("{} ", table.unwrap()); 
+	} 
+
+	println!("");
+
+	Ok(())
+}
+
+fn select_table(db: &Connection) -> Result<()> {
+	let mut table_name = String::new(); 
+
+	prompt_read_stdin(
+		"-> Please enter table to create/modify: ", 
+		&mut table_name,
+	);
+	
+	let _ =	create_table(db, &table_name)?; 
+
+	inner_loop(db, &table_name)?;
+
+	Ok(())
+}
+
+fn help_outer() {
+	print!(
+"Commands: 
+    .tables - display all tables
+    .select - select table to enter interactive mode
+    .drop   - drop table(s)
+    .help   - print help
+    .quit   - quit mytodo
+"
+	)
+}
+pub fn run(db: Connection) -> Result<()> {
+	'outer: loop {
+		let mut command = String::new();
+
+		command.clear();
+
+		prompt_read_stdin(
+			">>> ", 
+			&mut command,
+		);
+
+		let command = command.trim(); 
+
+		match command {
+			"" => print!(""),
+			"clear" =>  print!("\x1B[2J\x1B[1;1H"),
+			".quit" => break 'outer,
+			".tables" => display_tables(&db)?,  
+			".select" => select_table(&db)?, 
+			".help" => help_outer(), 
+			_ => { 
+				println!("{:?} is not a valid command", &command);
+				help_outer();
 			}
 		}
 	}
