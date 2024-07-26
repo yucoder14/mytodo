@@ -19,26 +19,35 @@ struct Todo {
 	done: bool, 
 }
 
-fn create_table(db: &Connection) -> Result<usize>{
+fn prompt_read_stdin(prompt: &str, buf: &mut String) {
+	print!("{}", prompt); 
+	let _ = io::stdout().flush(); 
+
+	io::stdin() 
+		.read_line(buf)
+		.expect("failed to read line"); 
+}
+
+fn create_table(db: &Connection, table_name: &str ) -> Result<usize>{
 	db.execute(
-        "CREATE TABLE IF NOT EXISTS person (
+        &format!("CREATE TABLE IF NOT EXISTS {table_name} (
             id   INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             data BLOB
-        )",
+        )")[..],
         (), 
     )
 }
 
 fn insert(db: &Connection) {
-	print!("-> Enter name: ");
 	let _ = io::stdout().flush(); 
 	
 	let mut name = String::new(); 
 
-	io::stdin() 
-		.read_line(&mut name)
-		.expect("failed to read line"); 
+	prompt_read_stdin( 
+		"-> Enter name: ",
+		&mut name,
+	);
 
 	let person = Person {
 		id: 0, 
@@ -55,18 +64,17 @@ fn insert(db: &Connection) {
 	} else {
 		println!("added {}", &person.name); 
 	}
-
 }
 
 fn delete(db: &Connection) -> Result<usize> {
-	print!("-> Enter id(s): "); 
 	let _ = io::stdout().flush(); 
 
 	let mut ids = String::new(); 
-	
-	io::stdin() 
-		.read_line(&mut ids)
-		.expect("failed to read line"); 
+
+	prompt_read_stdin( 
+		"-> Enter id(s): ",
+		&mut ids,
+	);
 
 	for id in ids.split_whitespace() { 
 		if let Err(e) = db.execute( 
@@ -111,23 +119,26 @@ fn help(){
 	)
 }
 
-
 pub fn run(db: Connection) -> Result<()> {	
+	let mut table_name = String::new(); 
 
-	let _ =	create_table(&db)?; 
+	prompt_read_stdin(
+		"Please enter list to create/modify: ", 
+		&mut table_name,
+	);
+	
+	let _ =	create_table(&db, &table_name)?; 
 
-	'test: loop {
-		print!(">>> "); 
-		let _ = io::stdout().flush();		
-
+	'mytodo: loop {
 		let mut command = String::new();
 
 		command.clear();
 
-		io::stdin()
-			.read_line(&mut command)
-			.expect("failed to read line");
-
+		prompt_read_stdin(
+			&*format!("{} >>> ", &table_name.trim()), 
+			&mut command,
+		);
+		
 		let mut command = command.split_whitespace();
 
 		let command = command 
@@ -135,7 +146,11 @@ pub fn run(db: Connection) -> Result<()> {
 			.unwrap_or("");
 
 		match &command[..] {
-			"quit" => break 'test, 
+			"" => print!(""),
+			"clear" => { 
+				print!("\x1B[2J\x1B[1;1H");
+			}
+			"quit" => break 'mytodo, 
 			"add" => {
 				let _ = insert(&db); 
 			} 
