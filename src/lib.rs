@@ -54,6 +54,26 @@ fn select_table(db: &Connection) -> Result<()> {
 	Ok(())
 }
 
+fn drop_table(db: &Connection) -> Result<()> {
+	let mut tables = String::new(); 
+
+	utilities::prompt_read_stdin( 
+		"-> Please enter table(s) to drop: ",
+		&mut tables, 
+	);
+
+
+	for table in tables.split_whitespace() {
+		db.execute(
+			&*format!("DROP TABLE IF EXISTS {}", &*table),
+			()
+		)?;
+		println!("dropped table: {}", table); 
+	}
+
+	Ok(())
+}	
+
 fn help_outer() {
 	print!(
 "Commands: 
@@ -85,6 +105,7 @@ pub fn run(db: Connection) -> Result<()> {
 			".quit" => break 'outer,
 			".tables" => display_tables(&db)?,  
 			".select" => select_table(&db)?, 
+			".drop" => drop_table(&db)?,
 			".help" => help_outer(), 
 			_ => { 
 				println!("{:?} is not a valid command", &command);
