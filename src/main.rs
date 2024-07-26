@@ -1,7 +1,6 @@
 use rusqlite::{Connection, Result};
 use std::process; 
 
-
 fn main() -> Result<()> {
     let conn = Connection::open("./test.db")?;
   
