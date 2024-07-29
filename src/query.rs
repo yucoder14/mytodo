@@ -1,47 +1,57 @@
 use rusqlite::{Connection, Result};
 use std::io::{self, Write}; 
-use derivative::Derivative;  
 use crate::utilities;
 
-#[derive(Debug)]
-struct Person {
-    id: i32,
-    name: String,
-    data: Option<Vec<u8>>,
-}
 
-#[derive(Derivative)]
-#[derivative(Debug, Default)] 
+#[derive(Debug)]
 struct Todo {
 	id: i32, 
-	content: String, 
+	todo: String, 
 	priority: i32, 
-	#[derivative(Default(value = "false"))]
-	done: bool, 
+	status: i32, 
 }
 
 fn insert(db: &Connection, table_name: &str) {
-	let mut name = String::new(); 
+	let mut todo = String::new(); 
 
 	utilities::prompt_read_stdin( 
-		"-> Enter name: ",
-		&mut name,
+		"-> Enter todo: ",
+		&mut todo,
 	);
 
-	let person = Person {
-		id: 0, 
-		name: name.trim().to_string(),
-		data: None,
-	};
+	let todo = todo.trim().to_string();
 
+	let mut priority = String::new(); 
+
+	let priority = loop {
+		priority.clear(); 
+		utilities::prompt_read_stdin( 
+			"-> Enter priority value (0 - 2, 2 being most urgent): ",
+			&mut priority,
+		);
+
+		match (*priority).trim().parse::<i32>() {
+			Ok(num) => {
+				break num;
+			}
+			Err(e) => println!("cannot parse a non integer: {e} "), 
+		};
+	}; 
+
+	let entry = Todo {
+		id: 0, 
+		todo,
+		priority,	
+		status: 0,
+	};
 	
 	if let Err(e) = db.execute(
-		&*format!("INSERT INTO {table_name} (name, data) Values (?1, ?2)"), 	
-		(&person.name, &person.data),
+		&*format!("INSERT INTO {table_name} (todo, priority, status) Values (?1, ?2, ?3)"), 	
+		(&entry.todo, &entry.priority, &entry.status),
 	) { 
-		println!("failed to add {}: {}", &person.name, e);
+		println!("failed to add {}: {}", &entry.todo, e);
 	} else {
-		println!("added {}", &person.name); 
+		println!("added {}", &entry.todo); 
 	}
 }
 
@@ -66,17 +76,18 @@ fn delete(db: &Connection, table_name: &str) {
 }
 
 fn display(db: &Connection, table_name: &str) -> Result<usize> {
-	let mut stmt = db.prepare(&*format!("SELECT id, name, data FROM {table_name}"))?;
-	let person_iter = stmt.query_map([], |row| {
-		Ok(Person {
+	let mut stmt = db.prepare(&*format!("SELECT id, todo, priority, status  FROM {table_name}"))?;
+	let entry_iter = stmt.query_map([], |row| {
+		Ok(Todo {
 			id: row.get(0)?,
-			name: row.get(1)?,
-			data: row.get(2)?,
+			todo: row.get(1)?,
+			priority: row.get(2)?,
+			status: row.get(3)?,
 		})
 	})?;
 
-	for person in person_iter {
-		println!("Found person {:?}", person.unwrap());
+	for entry in entry_iter {
+		println!("Found entry {:?}", entry.unwrap());
 	}
 
 	Ok(0)

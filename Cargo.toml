@@ -4,5 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-derivative = "2.2.0"
 rusqlite = "0.32.0"
