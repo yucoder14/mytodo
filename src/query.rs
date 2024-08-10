@@ -1,14 +1,52 @@
 use rusqlite::{Connection, Result};
 use std::io::{self, Write}; 
 use crate::utilities;
-
+use colored::Colorize;
 
 #[derive(Debug)]
 struct Todo {
-	id: i32, 
+	id: i32,
+	user_order: f64, 
+	numerator: i32, 
+	denominator: i32, 
 	todo: String, 
-	priority: i32, 
 	status: i32, 
+}
+
+fn create_table(db: &Connection, table_name: &str) -> Result<usize>{
+	let columns = vec![
+		"user_order REAL",
+		"numerator INTEGER",
+		"denominator INTEGER",
+		"todo TEXT NOT NULL",
+		"status INTEGER",
+	];
+
+	db.execute(
+        &*format!(
+"CREATE TABLE IF NOT EXISTS {table_name} (
+	id INTEGER PRIMARY KEY, 
+	{}
+)", 
+			columns.join(",\n\t")
+		),
+        (), 
+    )
+}
+
+fn get_latest_order(db: &Connection, table_name: &str) -> Option<i32>{
+	let mut stmt = db.prepare(
+		&*format!("SELECT user_order FROM {table_name} ORDER BY user_order DESC LIMIT 1")
+	).expect("prep fail");
+	
+	let mut rows = stmt.query([]).expect("query fail");
+
+	while let Some(row) = rows.next().expect("row fail") {
+		let dec: f64 = row.get(0).expect("get fail");
+		return Some((dec.floor() as i32) + 1);
+	}
+
+	None
 }
 
 fn insert(db: &Connection, table_name: &str) {
@@ -19,35 +57,42 @@ fn insert(db: &Connection, table_name: &str) {
 		&mut todo,
 	);
 
-	let todo = todo.trim().to_string();
+	let todo = todo
+		.trim()
+		.to_string();
 
-	let mut priority = String::new(); 
-
-	let priority = loop {
-		priority.clear(); 
-		utilities::prompt_read_stdin( 
-			"-> Enter priority value (0 - 2, 2 being most urgent): ",
-			&mut priority,
-		);
-
-		match (*priority).trim().parse::<i32>() {
-			Ok(num) => {
-				break num;
-			}
-			Err(e) => println!("cannot parse a non integer: {e} "), 
-		};
+	let numerator = match get_latest_order(db, table_name) {
+		Some(num) => num,
+		None => 1, 
 	}; 
 
 	let entry = Todo {
 		id: 0, 
+		user_order: (numerator / 1) as f64,
+		numerator, 
+		denominator: 1,
 		todo,
-		priority,	
 		status: 0,
 	};
 	
 	if let Err(e) = db.execute(
-		&*format!("INSERT INTO {table_name} (todo, priority, status) Values (?1, ?2, ?3)"), 	
-		(&entry.todo, &entry.priority, &entry.status),
+		&*format!(
+			"INSERT INTO {table_name} (
+				user_order, 
+				numerator, 
+				denominator,
+				todo, 
+				status
+			)
+			Values (?1, ?2, ?3, ?4, ?5)"
+		), 	
+		(
+			&entry.user_order,
+			&entry.numerator,
+			&entry.denominator,
+			&entry.todo, 
+			&entry.status
+		),
 	) { 
 		println!("failed to add {}: {}", &entry.todo, e);
 	} else {
@@ -76,18 +121,32 @@ fn delete(db: &Connection, table_name: &str) {
 }
 
 fn display(db: &Connection, table_name: &str) -> Result<usize> {
-	let mut stmt = db.prepare(&*format!("SELECT id, todo, priority, status  FROM {table_name}"))?;
+	let mut stmt = db.prepare(
+		&*format!(
+			"SELECT
+				id, 
+				user_order, 
+				numerator, 
+				denominator,
+				todo, 
+				status
+			FROM {table_name}"
+		)
+	)?;
 	let entry_iter = stmt.query_map([], |row| {
 		Ok(Todo {
 			id: row.get(0)?,
-			todo: row.get(1)?,
-			priority: row.get(2)?,
-			status: row.get(3)?,
+			user_order: row.get(1)?, 
+			numerator: row.get(2)?, 
+			denominator: row.get(3)?,
+			todo: row.get(4)?,
+			status: row.get(5)?,
 		})
 	})?;
 
 	for entry in entry_iter {
-		println!("Found entry {:?}", entry.unwrap());
+		let todo = entry.unwrap(); 
+		println!("id:{} - {}", todo.id, todo.todo);
 	}
 
 	Ok(0)
@@ -106,13 +165,23 @@ fn help_inner(){
 }
 
 pub fn inner_loop(db: &Connection, table_name: &str) -> Result<()> {
-	'inner: loop {
-		let mut command = String::new();
+	let _ =	create_table(
+		db, 
+		&table_name,
+	)?; 
 
+	let mut command = String::new();
+
+	'inner: loop {
 		command.clear();
 
 		utilities::prompt_read_stdin(
-			&*format!("({}) >>> ", &table_name.trim()), 
+			&*format!(
+				"({}) >>> ", 
+				&table_name
+					.trim()
+					.bold()
+			), 
 			&mut command,
 		);
 	
@@ -139,4 +208,3 @@ pub fn inner_loop(db: &Connection, table_name: &str) -> Result<()> {
 
 	Ok(())
 }
-

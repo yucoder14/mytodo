@@ -3,15 +3,6 @@ use rusqlite::{Connection, Result};
 mod query; 
 mod utilities;
 
-fn create_table(db: &Connection, table_name: &str, columns: Vec<&str>) -> Result<usize>{
-	db.execute(
-        &*format!("CREATE TABLE IF NOT EXISTS {table_name} (
-            id   INTEGER PRIMARY KEY, {}
-        )", columns.join(",")),
-        (), 
-    )
-}
-
 fn display_tables(db: &Connection) -> Result<()>{
 	let mut stmt = db.prepare(
 		"SELECT 
@@ -45,18 +36,6 @@ fn select_table(db: &Connection) -> Result<()> {
 		&mut table_name,
 	);
 	
-	let columns = vec![
- 						"todo TEXT NOT NULL",
-						"priority INTEGER",
-						"status INTEGER",
-					];
-
-	let _ =	create_table(
-				db, 
-				&table_name,
-				columns,
-			)?; 
-
 	query::inner_loop(db, &table_name)?;
 
 	Ok(())
