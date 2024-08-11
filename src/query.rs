@@ -138,7 +138,7 @@ fn shift(db: &Connection, table_name: &str) {
 
     let new_order = match new_order.trim().parse::<i32>() {
         Ok(num) => num,
-        Err(e) => {
+        Err(_e) => {
             println!("{:?} is not a valid number", new_order);
             return; 
         }
