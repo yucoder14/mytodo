@@ -13,6 +13,12 @@ struct Todo {
 	status: i32, 
 }
 
+#[derive(Debug)] 
+struct Fraction {
+    numerator: i32, 
+    denominator: i32, 
+}
+
 fn create_table(db: &Connection, table_name: &str) -> Result<usize>{
 	let columns = vec![
 		"user_order REAL",
@@ -100,6 +106,103 @@ fn insert(db: &Connection, table_name: &str) {
 	}
 }
 
+fn get_total_count(db: &Connection, table_name: &str) -> i32 {
+    let mut stmt = db.prepare(
+        &*format!("SELECT COUNT(*) FROM {table_name}")
+    ).expect("failed to get count"); 
+
+    let mut rows = stmt.query([]).expect("query fail");
+
+    while let Some(row) = rows.next().expect("row fail") {
+        let dec: i32 = row.get(0).expect("get fail");
+        return dec;
+    }
+
+    return 0
+}
+
+fn shift(db: &Connection, table_name: &str) { 
+    let mut id = String::new(); 
+    let mut new_order = String::new(); 
+    let total = get_total_count(db, table_name); 
+    
+    utilities::prompt_read_stdin(
+        "-> Enter id to move: ",
+        &mut id, 
+    );
+
+    utilities::prompt_read_stdin(
+        "-> Enter the new position:  ",
+        &mut new_order, 
+    );
+
+    let new_order = match new_order.trim().parse::<i32>() {
+        Ok(num) => num,
+        Err(e) => {
+            println!("{:?} is not a valid number", new_order);
+            return; 
+        }
+    };
+    
+    if new_order < 1 || new_order > total {
+        println!("index out of range");
+        return;
+    }
+
+    let offset = new_order - 2; 
+
+    let mut stmt = db.prepare(
+        &*format!("SELECT numerator, denominator from {table_name} 
+        ORDER BY user_order LIMIT 2 OFFSET {}", offset)
+    ).expect("fail to get adjacent rows");  
+   
+    let frac_iter = stmt.query_map([], |row| {
+        Ok(Fraction {
+            numerator: row.get(0).expect("fail to get data"),
+            denominator: row.get(1).expect("fail to get data"),
+        })
+    }).expect("fail to get fractions");  
+
+    let mut buf: Vec<Fraction> = Vec::new(); 
+
+    for frac in frac_iter {
+        buf.push(frac.unwrap());
+    } 
+    
+    let new_frac = match new_order {
+        1  => { 
+            let numerator = buf[0].numerator;
+            let denominator = buf[0].denominator + 1;
+            Fraction { numerator, denominator } 
+        }
+        num if num == total  => {
+            let numerator = buf[1].numerator + 1;
+            let denominator = buf[1].denominator;
+            Fraction { numerator, denominator } 
+        } 
+        _ => {
+            let numerator = buf[0].numerator + buf[1].numerator;
+            let denominator = buf[0].denominator + buf[1].denominator; 
+            Fraction { numerator, denominator } 
+        }
+    };
+
+    db.execute(
+        &*format!(
+            "UPDATE {table_name} SET 
+                numerator = {}, 
+                denominator = {},
+                user_order = {}
+            WHERE id = {}",
+            new_frac.numerator, 
+            new_frac.denominator, 
+            new_frac.numerator as f64 / new_frac.denominator as f64, 
+            id,
+        ),
+        ()
+    ).expect("moving failed"); 
+}
+
 fn delete(db: &Connection, table_name: &str) {
 	let mut ids = String::new(); 
 
@@ -130,7 +233,7 @@ fn display(db: &Connection, table_name: &str) -> Result<usize> {
 				denominator,
 				todo, 
 				status
-			FROM {table_name}"
+			FROM {table_name} ORDER BY user_order"
 		)
 	)?;
 	let entry_iter = stmt.query_map([], |row| {
@@ -144,9 +247,11 @@ fn display(db: &Connection, table_name: &str) -> Result<usize> {
 		})
 	})?;
 
+    let mut order = 1; 
 	for entry in entry_iter {
 		let todo = entry.unwrap(); 
-		println!("id:{} - {}", todo.id, todo.todo);
+		println!("{}. (id: {}) {}", order, todo.id, todo.todo);
+        order += 1;
 	}
 
 	Ok(0)
@@ -193,7 +298,8 @@ pub fn inner_loop(db: &Connection, table_name: &str) -> Result<()> {
 			"" => print!(""),
 			"clear" => print!("\x1B[2J\x1B[1;1H"),
 			"quit" => break 'inner, 
-			"add" => insert(db, table_name), 
+			"add" => insert(db, table_name),
+            "move" => shift(db, table_name),  
 			"del" => delete(db, table_name),
 			"list" => { 
 				let _ = display(db, table_name)?;
