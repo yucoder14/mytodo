@@ -261,6 +261,7 @@ fn help_inner(){
 	print!(
 "Commands: 
     add  - add a new element to the list 
+    move - move a preexisting element to different order
     del  - delete element(s) from the list
     list - display the list 
     help - print help
